@@ -1,93 +1,183 @@
 # AgentChangeBench
 
-## Overview
+**A Multi-Dimensional Evaluation Framework for Goal-Shift Robustness in Conversational AI**
 
-AgentChangeBench implements a simulation framework for evaluating customer service agents across various domains.
+[![NeurIPS 2025](https://img.shields.io/badge/NeurIPS%202025-Workshop-blue)](https://arxiv.org/abs/2510.18170)
+[![arXiv](https://img.shields.io/badge/arXiv-2510.18170-b31b1b)](https://arxiv.org/abs/2510.18170)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Each domain specifies:
-- a policy that the agent must follow
-- a set of tools that the agent can use
-- a set of tasks to evaluate the agent's performance
-- Optionally: A set of tools that the user simulator can use
+---
 
-Domains are:
-- `mock`
-- `airline`
-- `retail`
-- `telecom`
+## Table of Contents
 
-All the information that an agent developer needs to build an agent for a domain can be accessed through the domain's API docs. See [View domain documentation](#view-domain-documentation) for more details.
+- [Motivation](#motivation)
+- [What's in the Benchmark](#whats-in-the-benchmark)
+- [Evaluation Metrics](#evaluation-metrics)
+- [Key Findings](#key-findings)
+- [Domains](#domains)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [CLI Reference](#cli-reference)
+- [Experiments](#experiments)
+- [Evaluate Your Own Agent](#evaluate-your-own-agent)
+- [Simulation Architecture](#simulation-architecture)
+- [Citation](#citation)
+- [Authors](#authors)
+- [License](#license)
+
+---
+
+## Motivation
+
+Most LLM agent benchmarks assume user goals stay fixed throughout a conversation. This oversimplifies real-world deployments, where users frequently re-prioritize tasks, introduce new constraints, or shift objectives mid-dialogue. For example, a banking customer might authenticate their identity, pivot to reviewing transactions, and then escalate to disputing a fraudulent charge, all in one interaction.
+
+**AgentChangeBench** is the first benchmark explicitly designed to test how tool-augmented agents detect, adapt to, and recover from mid-conversation goal shifts, while also measuring how well they tailor communication to users with different levels of expertise, cooperation, and trust.
+
+> Accepted to the [NeurIPS 2025 Workshop on Multi-Turn Interactions in Large Language Models](https://arxiv.org/abs/2510.18170).
+
+---
+
+## What's in the Benchmark
+
+- **315 systematically validated tasks** across 3 enterprise domains, each annotated with explicit goal sequences
+- **2,835 task sequences** total, generated across trials and personas
+- **5 user personas** (`EASY_1`, `EASY_2`, `MEDIUM_1`, `MEDIUM_2`, `HARD_1`) varying in expertise, cooperation, and trust, each designed to trigger realistic shift points
+- **3 evaluation domains:** banking, retail, and airline
+
+---
+
+## Evaluation Metrics
+
+AgentChangeBench goes beyond binary `pass@k` scores with four complementary metrics:
+
+### Task Success Rate (TSR)
+Measures whether the agent completed the intended task via a weighted average across three evaluation channels:
+
+```
+TSR = 0.25 × communicate_info_rate + 0.45 × action_rate + 0.30 × nl_assertion_rate
+```
+
+### Tool Use Efficiency (TUE)
+Combines tool correctness `T` (fraction of tool calls that execute successfully) and parameter validity `P` (fraction of calls whose arguments satisfy the schema):
+
+```
+TUE = 0.6 × T + 0.4 × P
+```
+
+### Tool Call Redundancy Rate (TCRR)
+Measures wasted effort; how many tool calls were redundant after a goal shift occurred.
+
+### Goal-Shift Recovery Time (GSRT)
+Measures adaptation latency: turns from a user goal shift to acknowledgment, first relevant tool call, and task completion. **Lower is better.**
+
+### How AgentChangeBench compares to τ²-bench
+
+| Feature | τ²-bench | AgentChangeBench |
+|---|---|---|
+| Goal dynamics | Static | Mid-dialogue shifts |
+| Persona coverage | Limited | 5 distinct personas |
+| Primary metric | `pass@k` | TSR, TUE, TCRR, GSRT |
+| Tool evaluation | Basic | Correctness + validity + redundancy |
+| Recovery measurement | ❌ | ✅ |
+
+---
+
+## Key Findings
+
+Experiments across GPT-4o, Claude-3.7-Sonnet, and Gemini-2.5-Flash reveal sharp contrasts hidden by traditional accuracy metrics:
+
+- **Claude-3.7-Sonnet recovers fastest** from goal shifts across all domains
+- **GPT-4o** delivers the most balanced cross-domain performance, reaching **92.2% recovery** on airline booking goal shifts
+- **Gemini-2.5-Flash** drops to **48.6% recovery** in banking but remains competitive in retail
+- **Retail tasks** show near-perfect parameter validity yet **redundancy rates above 80%**. Agents kept making unnecessary tool calls even after achieving what they needed
+
+> High raw accuracy does not imply robustness under dynamic goals. Measuring recovery time and redundancy is essential.
+
+---
+
+## Domains
+
+Each domain defines a policy the agent must follow, a set of available tools, and a set of goal-shifted task sequences. The `mock` domain is a sandbox for development.
+
+| Domain | Description |
+|---|---|
+| `banking` | Identity auth → transaction review → fraud dispute workflows |
+| `retail` | Order management and product inquiries with mid-session pivots |
+| `airline` | Flight booking, changes, and cancellations |
+| `mock` | Minimal sandbox for development and testing |
+
+---
 
 ## Installation
 
-1. Clone the repository:
+**Requires Python 3.10+**
+
 ```bash
+# 1. Clone the repository
 git clone https://github.com/Maniktherana/AgentChangeBench
 cd AgentChangeBench
+
+# 2. Install with uv
+uv sync
 ```
 
-2. Create a new environment (optional)
+This installs all dependencies and enables the `tau2` CLI.
 
-AgentChangeBench requires Python 3.10 or higher. You may create and activate a new environment
-Use [`uv`](https://docs.astral.sh/uv/getting-started/installation/) to create a new environment and install the dependencies.
+> **Note:** If you use `uv pip install .` instead of `uv sync`, set the data directory manually:
+> ```bash
+> export TAU2_DATA_DIR=/path/to/your/tau2-bench/data
+> ```
 
-```bash
-uv sync 
-```
-
-This will install all dependencies and enable you to run the `tau2` command.
-
-**Note:** If you use `uv pip install .` (without `uv sync`), you'll need to set the `TAU2_DATA_DIR` environment variable to point to your data directory:
-
-```bash
-export TAU2_DATA_DIR=/path/to/your/tau2-bench/data
-```
-
-**Check your data directory setup:**
-
-After installation, you can verify that your data directory is correctly configured by running:
+Verify your setup after installation:
 
 ```bash
 tau2 check-data
 ```
 
-This command will check if the data directory exists and print instructions if it is missing.
+Clean generated files and the virtual environment:
 
-To remove all the generated files and the virtual environment, run:
 ```bash
 make clean
 ```
 
+---
+
 ## Quick Start
 
-### Setup LLM API keys
+### 1. Configure API Keys
 
-We use [LiteLLM](https://github.com/BerriAI/litellm) to manage LLM APIs, so you can use any LLM provider supported by LiteLLM.
-
-To provide your API keys, copy `.env.example` as `.env` and edit it to include your API keys.
-
-### Run agent evaluation
-
-To run a test evaluation on only 5 tasks with 1 trial per task, run:
+AgentChangeBench uses [LiteLLM](https://github.com/BerriAI/litellm), so any LiteLLM-compatible LLM provider works.
 
 ```bash
-tau2 run \ 
---domain airline \
---agent-llm gpt-4.1 \
---user-llm gpt-4.1 \
---agent llm_agent \ 
---user banking_user_simulator \
---num-trials 1 \
---num-tasks 5
+cp .env.example .env
+# Edit .env with your API keys
 ```
 
-Results will be saved in `data/tau2/simulations/`.
+### 2. Run a Test Evaluation
 
-## Command Line Interface
+Run a quick evaluation on 5 tasks with 1 trial each:
 
-The `tau2` command provides a unified interface for all functionality:
+```bash
+tau2 run \
+  --domain airline \
+  --agent-llm gpt-4.1 \
+  --user-llm gpt-4.1 \
+  --agent llm_agent \
+  --user banking_user_simulator \
+  --num-trials 1 \
+  --num-tasks 5
+```
 
-### Running Benchmark 
+Results are saved to `data/tau2/simulations/`.
+
+---
+
+## CLI Reference
+
+### Run Benchmark
+
 ```bash
 tau2 run \
   --domain <domain> \
@@ -95,153 +185,74 @@ tau2 run \
   --user-llm <llm_name> \
   --num-trials <trial_count> \
   --task-ids <task_ids> \
-  --max-concurrency <concurrent_sims> \
-  ...
+  --max-concurrency <concurrent_sims>
 ```
 
-### Viewing Results
+### View Results
+
 ```bash
 tau2 view
 ```
-This tool allows you to:
-- Browse simulation files (in `data/tau2/simulations/`)
-- View agent performance metrics
-- View a particular simulation
-- View task details
 
-### View domain documentation
-```bash
-tau2 domain <domain>
-```
-Visit http://127.0.0.1:8004/redoc to see the domain policy and API documentation.
+Browse simulation files, view per-metric agent performance, inspect individual simulations, and explore task details.
 
-![domain_viewer1](figs/domain_viewer.png)
 
-### Check data configuration
+### Check Data Configuration
+
 ```bash
 tau2 check-data
 ```
-This command checks if your data directory is properly configured and all required files are present.
+
+---
 
 ## Experiments
 
-### Running Ablation Studies (No User, or Agent with Oracle Plan)
-`telecom` domain enables running ablation studies.
+### Ablation Studies (Telecom Domain)
 
-1. Running an LLM in `no-user` mode. In this mode, the LLM is given all the tools and the information upfront.
-Just choose `llm_agent_solo` as the agent and `dummy_user` as the user.
+The `telecom` domain supports two ablation modes:
+
+**No-user mode**: the agent receives all tools and information upfront, removing user simulation:
 
 ```bash
 tau2 run \
   --domain telecom \
   --agent llm_agent_solo \
   --agent-llm gpt-4.1 \
-  --user dummy_user \
-  ...
+  --user dummy_user
 ```
 
-2. Running an LLM in `oracle-plan` mode. In this mode, the LLM is given an oracle plan ahead of time alleviating the need for action planning.
-Just choose `llm_agent_gt` as the agent.
+**Oracle-plan mode**: the agent is given a ground-truth plan ahead of time, removing the need for action planning:
 
 ```bash
 tau2 run \
   --domain telecom \
   --agent llm_agent_gt \
   --agent-llm gpt-4.1 \
-  --user-llm gpt-4.1 \
-  ...
+  --user-llm gpt-4.1
 ```
 
-### Running Telecom Domain with Workflow Policy
-To test the impact of policy format, we provide an additional "workflow" policy for the telecom domain.
-To run using this policy, use the `telecom-workflow` domain.
+### Workflow Policy Format
+
+To test the impact of policy format, use the `telecom-workflow` domain, which provides a structured workflow-style policy instead of the default prose format:
 
 ```bash
 tau2 run \
   --domain telecom-workflow \
   --agent-llm gpt-4.1 \
-  --user-llm gpt-4.1 \
-  ...
+  --user-llm gpt-4.1
 ```
 
-## Domains
-
-For all the details see the domains [README](src/tau2/domains/README.md).
-
-### Basics
-
-- Code is located in `src/tau2/domains/`
-- Data is located in `data/tau2/domains/`
-- Each domain has its own configuration and task definitions
-
-#### View domain-specific policy and API docs:
-Run the following command to see the domain policy and API documentation.
-```bash
-tau2 env <domain>
-```
-
-Then visit http://127.0.0.1:8004/redoc
-
-### Environment CLI (beta)
-
-An interactive command-line interface for directly querying and testing domain environments. Features:
-- Interactive query interface with domain-specific tools
-- Support for multiple domains (airline, mock, etc.)
-- Session management with history
-
-To use:
-```bash
-make env-cli
-```
-
-Available commands:
-- `:q` - quit the program
-- `:d` - change domain
-- `:n` - start new session (clears history)
-
-Example usage:
-```bash
-$ make env-cli
-
-Welcome to the Environment CLI!
-Connected to airline domain.
-
-Query (:n new session, :d change domain, :q quit)> What flights are available from SF to LA tomorrow?
-Assistant: Let me check the flight availability for you...
-[Flight details will appear here]
-```
-
-The Environment CLI is useful for:
-- Testing domain tools and queries
-- Debugging environment responses
-- Exploring available domain functionality
-- Quick domain interaction without starting the full server stack
-
-
-## Run tests
-To run the test suite use the command
-
-```sh
-make test
-```
-
-## Config
-
-To configure the framework, see the [config](src/tau2/config.py) file.
-
-### LLM Calls caching
-LLM call caching is disabled by default.
-
-To enable LLM calls caching:
-    - Make sure `redis` is running.
-    - Update the redis config in `config.py` if necessary.
-    - Set `LLM_CACHE_ENABLED` to `True` in `config.py`
-
+---
 
 ## Evaluate Your Own Agent
-For local or remote agent evaluation, see our [agent developer guide](src/tau2/agent/README.md).
 
-## Orchestration Sequence Diagram
+To plug in a local or remote custom agent, see the [agent developer guide](src/tau2/agent/README.md). All domain-specific policy and API documentation accessible to agent developers is available via `tau2 domain <domain>`.
+
+---
+
+## Simulation Architecture
+
+The orchestrator passes messages between a user simulator, an agent, and a domain environment. On each turn, one of three transitions occurs:
 
 ```mermaid
 sequenceDiagram
@@ -251,37 +262,55 @@ sequenceDiagram
     participant E as Environment
 
     Note over O: Initialize(task)
-    rect rgb(100, 150, 150)
-        O->>A: get_init_state_info(message_history)
-        A->>O: agent_state_info
-        O->>U: get_init_state_info(message_history)
-        U->>O: user_state_info
-        O->>E: set_state(initialization_data, initialization_actions, message_history)
-    end
-    Note over O: Start simulation
-    loop Pass messages between Agent, User, and Environment
+    O->>A: get_init_state_info(message_history)
+    A->>O: agent_state_info
+    O->>U: get_init_state_info(message_history)
+    U->>O: user_state_info
+    O->>E: set_state(init_data, init_actions, history)
 
-        alt Agent/Env to User
-            rect rgb(200, 150, 150)
+    loop Each turn
+        alt Agent/Env → User
             O->>U: generate_next_message(msg, user_state_info)
             U-->>O: (user_msg, user_state_info)
-            end
-            Note over O: Check if user_msg is STOP
-        else User/Env to Agent
-            rect rgb(100, 200, 100)
+            Note over O: Check STOP signal
+        else User/Env → Agent
             O->>A: generate_next_message(msg, agent_state_info)
             A-->>O: (assistant_msg, agent_state_info)
-            Note over O: Check if too many errors
-            end
-        else User/Agent to Environment
-            rect rgb(150, 150, 200)
+        else Tool call → Environment
             O->>E: get_response(tool_call)
             E-->>O: tool_message
-            end
         end
-        Note over O: Check if max turns reached.
+        Note over O: Check max turns
     end
     Note over O: Return simulation run
 ```
 
+---
 
+## Citation
+
+If you use AgentChangeBench in your research, please cite:
+
+```bibtex
+@misc{rana2025agentchangebench,
+  title        = {AgentChangeBench: A Multi-Dimensional Evaluation Framework for Goal-Shift Robustness in Conversational AI},
+  author       = {Manik Rana and Calissa Man and Anotida Expected Msiiwa and Jeffrey Paine and Kevin Zhu and Sunishchal Dev and Vasu Sharma and Ahan M R},
+  year         = {2025},
+  eprint       = {2510.18170},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.AI},
+  url          = {https://arxiv.org/abs/2510.18170}
+}
+```
+
+---
+
+## Authors
+
+Manik Rana · Calissa Man · Anotida Expected Msiiwa · Jeffrey Paine · Kevin Zhu · Sunishchal Dev · Vasu Sharma · Ahan M R
+
+---
+
+## License
+
+[MIT License](LICENSE)
