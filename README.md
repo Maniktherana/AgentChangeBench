@@ -20,7 +20,6 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [CLI Reference](#cli-reference)
-- [Experiments](#experiments)
 - [Evaluate Your Own Agent](#evaluate-your-own-agent)
 - [Simulation Architecture](#simulation-architecture)
 - [Citation](#citation)
@@ -201,45 +200,6 @@ Browse simulation files, view per-metric agent performance, inspect individual s
 
 ```bash
 tau2 check-data
-```
-
----
-
-## Experiments
-
-### Ablation Studies (Telecom Domain)
-
-The `telecom` domain supports two ablation modes:
-
-**No-user mode**: the agent receives all tools and information upfront, removing user simulation:
-
-```bash
-tau2 run \
-  --domain telecom \
-  --agent llm_agent_solo \
-  --agent-llm gpt-4.1 \
-  --user dummy_user
-```
-
-**Oracle-plan mode**: the agent is given a ground-truth plan ahead of time, removing the need for action planning:
-
-```bash
-tau2 run \
-  --domain telecom \
-  --agent llm_agent_gt \
-  --agent-llm gpt-4.1 \
-  --user-llm gpt-4.1
-```
-
-### Workflow Policy Format
-
-To test the impact of policy format, use the `telecom-workflow` domain, which provides a structured workflow-style policy instead of the default prose format:
-
-```bash
-tau2 run \
-  --domain telecom-workflow \
-  --agent-llm gpt-4.1 \
-  --user-llm gpt-4.1
 ```
 
 ---
